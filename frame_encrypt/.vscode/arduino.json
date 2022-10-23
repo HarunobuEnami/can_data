@@ -1,0 +1,6 @@
+{
+    "sketch": "encrypt_test.ino",
+    "port": "/dev/ttyACM0",
+    "board": "arduino:avr:uno",
+    "programmer": "arduino:avrispmkii"
+}
