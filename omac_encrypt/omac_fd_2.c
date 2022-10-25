@@ -1,4 +1,4 @@
-//メッセージ長4 bytesのバージョンの例
+//メッセージ長8 bytesのバージョンの例
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,9 +29,10 @@ int initialize_can(struct canfd_frame *frame,struct sockaddr_can *addr,struct if
 int initialize_can2(struct canfd_frame *frame,struct sockaddr_can *addr,struct ifreq *ifr,const char *ifname,int canid,int frame_bytes);
 int recieve_fd(struct sockaddr_can *addr, struct canfd_frame *frame, struct ifreq *ifr,const char *ifname);
 void send_fd(struct sockaddr_can *addr, struct canfd_frame *frame, struct ifreq *ifr,const char *ifname);
-void macgen(unsigned char *key,char * plain,int length,unsigned char *MAC);
-static void phex(uint8_t* str);
-static int origin_dlc[]={0,1,2,3,4,5,6,7,8,-1,-1,-1,9,-1,-1,-1,10,-1,-1,-1,11-1,-1,-1,12-1,-1,-1,-1,-1,-1,-1,13}; //n番目がn byteのときのDLCの値を示す．無効なbyte長は-1を返す
+void macgen(unsigned char *key,unsigned char * plain,int length,unsigned char *MAC,int mac_seq);
+static void phex(uint8_t* str,int len);
+const int origin_dlc[]={0,1,2,3,4,5,6,7,8,-1,-1,-1,9,-1,-1,-1,10,-1,-1,-1,11-1,-1,-1,12-1,-1,-1,-1,-1,-1,-1,13}; //n番目がn byteのときのDLCの値を示す．無効なbyte長は-1を返す
+const int origin_dlc_inv[] ={0,1,2,3,4,5,6,7,8,12,16,20,24}; //n番目がDLCnのときのバイト長を示す
  uint8_t encrypt_key[16]= { 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c };
   uint8_t iv[16]= { 0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff };
 uint32_t seq;
@@ -40,8 +41,8 @@ int main(int argc,char *argv[])
     struct sockaddr_can addr;
 	struct canfd_frame frame;
     struct ifreq ifr;
-    seq = 0;
     int nsec;
+    seq = 0;
     FILE* f;
         init_Rnd_cdm(0x01d0);
     if(argc!=2)
@@ -51,8 +52,9 @@ int main(int argc,char *argv[])
     if(strcmp(argv[1],"recieve")==0)
     {
         while(1){
-              ++seq;
+             
              recieve_fd(&addr,&frame,&ifr,"can0");
+              ++seq;
              printf("recieved %d frames\n",seq);
         }
        
@@ -64,8 +66,9 @@ int main(int argc,char *argv[])
             fclose(f);
             exit(0);
           } 
-            ++seq;
+            
              send_fd(&addr,&frame,&ifr,"can1");
+             ++seq;
              usleep(120000); //11 msec(10000000 nsec)から怪しくなり始める
              fprintf(f,"%d\n",nsec);
 
@@ -88,21 +91,20 @@ int makeframe(struct canfd_frame *frame,uint8_t * plain,int plain_byte) //フレ
 {
   static unsigned char key[AES_BLOCK_SIZE];
   unsigned char MAC[AES_BLOCK_SIZE];
-
+  uint32_t sending_seq = seq;
   int i;
 memcpy(frame->data,plain,plain_byte);
- macgen(key,plain,plain_byte,MAC);
-   
+ macgen(key,plain,plain_byte,MAC,seq);
 for(i=plain_byte;i<plain_byte+8;++i)
 {
   frame->data[i] = MAC[i];
 }
-	frame->data[(plain_byte+8)+0] = (uint8_t )0x000000ff&seq;
-	frame->data[(plain_byte+8)+1] =  (uint8_t )((0x0000ff00&seq)>>8) ;
-	frame->data[(plain_byte+8)+2] =  (uint8_t )((0x00ff0000&seq)>>16) ;
+	frame->data[(plain_byte+8)+0] = (uint8_t )0x000000ff&sending_seq;
+	frame->data[(plain_byte+8)+1] =  (uint8_t )((0x0000ff00&sending_seq)>>8) ;
+	frame->data[(plain_byte+8)+2] =  (uint8_t )((0x00ff0000&sending_seq)>>16) ;
 	frame->data[(plain_byte+8)+3] = origin_dlc[plain_byte];
  
-  return plain_byte+8+4;
+  return plain_byte+plain_byte+4;
 }
 
 int initialize_can(struct canfd_frame *frame,struct sockaddr_can *addr,struct ifreq *ifr,const char *ifname,int canid,int plain_bytes) //受信のときはframe_bytesを-1にする
@@ -185,31 +187,31 @@ int initialize_can(struct canfd_frame *frame,struct sockaddr_can *addr,struct if
   return s;
 }
 
-void macgen(unsigned char *key,char * plain,int length,unsigned char *MAC)
+void macgen(unsigned char *key,unsigned char * plain,int length,unsigned char *MAC,int mac_seq)
 {
-   if(seq==0)
+   if(mac_seq==0)
   {
     for(int i=0;i<AES_BLOCK_SIZE;i++){
 		key[i]=Rnd_byte();
     }
 	}
-  omac1_aes_128(key,plain,length,MAC);
    if(((seq&0x000000ff)==0xff)&&seq!=0){
     for(int i=0;i<AES_BLOCK_SIZE;i++){
 		key[i]=Rnd_byte()^key[i];
     	
     }
   }
+omac1_aes_128(key,plain,length,MAC);
 }
 
 void send_fd(struct sockaddr_can *addr, struct canfd_frame *frame, struct ifreq *ifr,const char *ifname)
 {
   int s;
-  struct AES_ctx ctx;
+ static struct AES_ctx ctx;
   int length;
   uint8_t plain []= {0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08};
  
-  if(seq==0) {AES_init_ctx_iv(&ctx, encrypt_key, iv);}
+  if(seq==0) {AES_init_ctx_iv(&ctx, encrypt_key, iv); }
   s = initialize_can2(frame,addr,ifr,ifname,0x02,PLAIN_BYTES);
   length=makeframe(frame,plain,PLAIN_BYTES);
   AES_CTR_xcrypt_buffer(&ctx, frame->data,length -4);
@@ -220,41 +222,43 @@ int recieve_fd(struct sockaddr_can *addr, struct canfd_frame *frame, struct ifre
   int s;
   int i;
   uint32_t recieved_seq;
-  struct AES_ctx ctx;
+  static struct AES_ctx ctx;
+  static unsigned char key[AES_BLOCK_SIZE];
+  unsigned char MAC[AES_BLOCK_SIZE];
   int length;
   int nbytes;
   unsigned int address_length =CANFD_MTU;
   if(seq==0) {AES_init_ctx_iv(&ctx, encrypt_key, iv);}
-    printf("OK\n");
   s = initialize_can2(frame,addr,ifr,ifname,0,-1);
-    printf("OK\n");
   nbytes = recvfrom(s, frame, CANFD_MTU,0, (struct sockaddr*) addr, &address_length);
-  printf("OK\n");
-    AES_CTR_xcrypt_buffer(&ctx, frame->data,nbytes -4);
-  for(i=0;i<20;++i)
+  AES_CTR_xcrypt_buffer(&ctx, frame->data,frame->len -4);
+  recieved_seq=0;
+  recieved_seq += (uint32_t)frame->data[(frame->len-1)-3]; //一番最後がDLCでそこから3歩下がるとシーケンス番号が始まる
+  recieved_seq += ((uint32_t)(frame->data[(frame->len-1)-2])<<8);
+  recieved_seq += ((uint32_t)(frame->data[(frame->len-1)-1])<<16);
+  macgen(key,frame->data,origin_dlc_inv[frame->data[frame->len-1]],MAC,recieved_seq);
+  printf("recieved message ");
+  phex(frame->data,origin_dlc_inv[frame->data[frame->len-1]]);
+  printf("generated mac : ");
+  phex(MAC+origin_dlc_inv[frame->data[frame->len-1]],origin_dlc_inv[frame->data[frame->len-1]]);
+  printf("recieved mac : ");
+  phex(frame->data+origin_dlc_inv[frame->data[frame->len-1]],8);
+  if(memcmp(frame->data+origin_dlc_inv[frame->data[frame->len-1]],MAC+origin_dlc_inv[frame->data[frame->len-1]],origin_dlc_inv[frame->data[frame->len-1]])==0)
   {
-    printf("%02x ",frame->data[i]);
+    printf("valid\n");
+  }else{
+    printf("invalid\n");
   }
-  putchar('\n');
   return nbytes;
 }
-static void phex(uint8_t* str)
+
+static void phex(uint8_t* str,int len)
 {
-
-#if defined(AES256)
-    uint8_t len = 32;
-#elif defined(AES192)
-    uint8_t len = 24;
-#elif defined(AES128)
-    uint8_t len = 16;
-#endif
-
     unsigned char i;
     for (i = 0; i < len; ++i)
-        printf("%.2x", str[i]);
+        printf("%.2x ", str[i]);
     printf("\n");
 }
-
 int initialize_can2(struct canfd_frame *frame,struct sockaddr_can *addr,struct ifreq *ifr,const char *ifname,int canid,int frame_bytes) //受信時，idは0frame_bytesは-1にする
 {
   int s;
@@ -309,6 +313,7 @@ if(frame_bytes!=-1)
 			printf("CAN interface is not CAN FD capable - sorry.\n");
 			exit(1);
 		}
+
 }
 
   if (setsockopt(s, SOL_CAN_RAW, CAN_RAW_ERR_FILTER, &err_mask, sizeof(err_mask))) {
@@ -321,6 +326,8 @@ if(frame_bytes!=-1)
      {
        setsockopt(s, SOL_CAN_RAW, CAN_RAW_FILTER, NULL, 0);
         ioctl(s, SIOCGIFINDEX, ifr);
+        frame->len = frame_bytes+4+8;
+      frame->can_id = canid;
      }
       addr->can_family = AF_CAN;
   addr->can_ifindex = ifr->ifr_ifindex;
