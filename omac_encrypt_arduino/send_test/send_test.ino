@@ -41,6 +41,7 @@ struct AES_ctx ctx;
 void macgen(unsigned char *key,char * plain,int length,unsigned char *MAC);
 int makeframe(unsigned char *frame,unsigned char * plain,int plain_byte);
 static void phex(uint8_t* str,int len);
+bool isMemory();
 void setup() {
  Serial.begin(115200);
  while (!Serial) {}
@@ -53,7 +54,7 @@ void setup() {
     byte mode = CAN.getMode();
     Serial.print(F("CAN mode = "));
     Serial.println(mode);
-    AES_init_ctx_iv(&ctx, encrypt_key, iv);
+    //AES_init_ctx_iv(&ctx, encrypt_key, iv);
     seq = 0;
 }
 
@@ -121,4 +122,13 @@ static void phex(uint8_t* str,int len)
         {sprintf(buff,"%.2x ", str[i]);
         Serial.print(buff);}
     Serial.print("\n");
+}
+
+bool isMemory(){
+  String s = F("");
+  s.concat(F("a"));
+  if(s.length() == 1){
+    return true;
+  }
+  return false;
 }
