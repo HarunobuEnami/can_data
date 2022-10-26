@@ -48,7 +48,7 @@ void setup() {
   while(!Serial.available())
   
  while (0 != CAN.begin(CAN_500K_1M));
-   init_Rnd_cdm(0x01d0);
+    init_Rnd_cdm(0x01d0);
     Serial.println(F("CAN init ok!"));
     byte mode = CAN.getMode();
     Serial.print(F("CAN mode = "));
@@ -84,25 +84,24 @@ void macgen(unsigned char *key,unsigned char * plain,int len,unsigned char *MAC)
     }
      Serial.println("key init");
 	}
- 
+   omac1_aes_128(key,plain,(uint16_t )len,MAC);
+   phex(MAC,AES_BLOCK_SIZE);
    if(((seq&0x000000ff)==0xff)&&seq!=0){
      Serial.println("key update");
     for(int i=0;i<AES_BLOCK_SIZE;i++){
 		key[i]=Rnd_byte()^key[i];
     }
   }
-   omac1_aes_128(key,plain,len,MAC);
+
 }
 
 int makeframe(unsigned char *frame,unsigned char * plain,int plain_byte) //フレームを作成し，その合計長をバイト単位で返す
 {
   static unsigned char key[AES_BLOCK_SIZE];
   unsigned char MAC[AES_BLOCK_SIZE];
-
   int i;
  memcpy(frame,plain,plain_byte);
  macgen(key,plain,plain_byte,MAC);
-   
 for(i=plain_byte;i<plain_byte+8;++i)
 {
   frame[i] = MAC[i];
