@@ -1,3 +1,0 @@
-/home/harunobu/Desktop/omac_encrypt/tiny-AES-c/CMakeFiles/rebuild_cache.dir
-/home/harunobu/Desktop/omac_encrypt/tiny-AES-c/CMakeFiles/edit_cache.dir
-/home/harunobu/Desktop/omac_encrypt/tiny-AES-c/CMakeFiles/tiny-aes.dir
