@@ -103,6 +103,7 @@ int makeframe(unsigned char *frame,unsigned char * plain,int plain_byte) //ãƒ•ãƒ
   int i;
  memcpy(frame,plain,plain_byte);
  macgen(key,plain,plain_byte,MAC);
+ Serial.println(isMemory());
 for(i=plain_byte;i<plain_byte+8;++i)
 {
   frame[i] = MAC[i];
@@ -125,8 +126,8 @@ static void phex(uint8_t* str,int len)
 }
 
 bool isMemory(){
-  String s = F("");
-  s.concat(F("a"));
+  String s = ("");
+  s.concat(("a"));
   if(s.length() == 1){
     return true;
   }
